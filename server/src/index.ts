@@ -85,7 +85,10 @@ async function register() {
   })
 
   app.get('/api/profile', async (request) => {
-    const profile = database.prepare('SELECT * FROM profiles WHERE session_id = ?').get(request.sessionId) as Record<string, unknown> | undefined
+    const user = currentUser(request.sessionId)
+    const profile = user
+      ? database.prepare('SELECT * FROM profiles WHERE session_id = ? OR user_id = ? ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END LIMIT 1').get(request.sessionId, user.id, user.id) as Record<string, unknown> | undefined
+      : database.prepare('SELECT * FROM profiles WHERE session_id = ?').get(request.sessionId) as Record<string, unknown> | undefined
     return profile ? { ...profile, metrics: profile.metrics ? JSON.parse(String(profile.metrics)) : null } : null
   })
 
@@ -95,11 +98,16 @@ async function register() {
     return reply.send({ ok: true })
   })
 
-  app.get('/api/conversations', async (request) => database.prepare('SELECT id, title, substr((SELECT content FROM messages WHERE conversation_id = conversations.id AND role = \'user\' ORDER BY created_at LIMIT 1), 1, 70) AS preview, updated_at AS updatedAt FROM conversations WHERE session_id = ? ORDER BY updated_at DESC').all(request.sessionId))
+  app.get('/api/conversations', async (request) => {
+    const user = currentUser(request.sessionId)
+    const query = 'SELECT id, title, substr((SELECT content FROM messages WHERE conversation_id = conversations.id AND role = \'user\' ORDER BY created_at LIMIT 1), 1, 70) AS preview, updated_at AS updatedAt FROM conversations WHERE user_id = ? OR session_id = ? ORDER BY updated_at DESC'
+    return user ? database.prepare(query).all(user.id, request.sessionId) : database.prepare(query).all(null, request.sessionId)
+  })
 
   app.get('/api/conversations/:id', async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).parse(request.params)
-    const conversation = database.prepare('SELECT id, title FROM conversations WHERE id = ? AND session_id = ?').get(params.id, request.sessionId) as { id: string; title: string } | undefined
+    const user = currentUser(request.sessionId)
+    const conversation = database.prepare('SELECT id, title FROM conversations WHERE id = ? AND (user_id = ? OR session_id = ?)').get(params.id, user?.id ?? null, request.sessionId) as { id: string; title: string } | undefined
     if (!conversation) return reply.code(404).send({ error: 'Conversation not found.' })
     const messages = database.prepare('SELECT id, role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC').all(params.id)
     return { ...conversation, messages }
@@ -115,7 +123,8 @@ async function register() {
     try {
       let conversationId = input.conversationId
       if (conversationId) {
-        const exists = database.prepare('SELECT id FROM conversations WHERE id = ? AND session_id = ?').get(conversationId, request.sessionId)
+        const user = currentUser(request.sessionId)
+        const exists = database.prepare('SELECT id FROM conversations WHERE id = ? AND (user_id = ? OR session_id = ?)').get(conversationId, user?.id ?? null, request.sessionId)
         if (!exists) conversationId = undefined
       }
       if (!conversationId) {

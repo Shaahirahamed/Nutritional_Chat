@@ -1,0 +1,13 @@
+node_modules
+dist
+.local
+.git
+.agents
+.aws
+.codex
+*.db
+*.db-shm
+*.db-wal
+server/.env
+Dockerfile*
+docker-compose*.yml

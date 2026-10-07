@@ -1,0 +1,39 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      PORT: 3001
+      DATABASE_PATH: /app/data/nutri.db
+      COOKIE_SECRET: ${COOKIE_SECRET:-change-this-cookie-secret}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - nutri_data:/app/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    depends_on:
+      - server
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    user: "0:0"
+    command: tunnel --no-autoupdate --config ${CLOUDFLARED_DIR:-/home/shaahir/.cloudflared}/config.yml run ${CLOUDFLARED_TUNNEL_NAME:-Backendhost}
+    depends_on:
+      - web
+    volumes:
+      - ${CLOUDFLARED_DIR:-/home/shaahir/.cloudflared}:${CLOUDFLARED_DIR:-/home/shaahir/.cloudflared}:ro
+    restart: unless-stopped
+
+volumes:
+  nutri_data:

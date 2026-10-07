@@ -14,6 +14,10 @@ const starters = [
 
 const initialMessage: Message = { id: 'welcome', role: 'assistant', content: 'Hi! I’m Nutri, your everyday nutrition guide. Tell me what you’re working toward and I’ll help you make a plan that feels realistic, enjoyable, and sustainable.' }
 
+const makeId = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+  ? crypto.randomUUID()
+  : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
 function App() {
   const [messages, setMessages] = useState<Message[]>([initialMessage])
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -59,8 +63,8 @@ function App() {
     const text = (prompt ?? input).trim()
     if (!text || isStreaming) return
     setInput('')
-    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: text }
-    const assistantId = crypto.randomUUID()
+    const userMessage: Message = { id: makeId(), role: 'user', content: text }
+    const assistantId = makeId()
     const history = [...messages.filter((message) => message.id !== 'welcome'), userMessage]
     setMessages((current) => [...current.filter((message) => message.id !== 'welcome'), userMessage, { id: assistantId, role: 'assistant', content: '' }])
     setIsStreaming(true); abortRef.current = new AbortController()
